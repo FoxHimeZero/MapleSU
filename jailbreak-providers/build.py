@@ -14,11 +14,46 @@ import re
 from pathlib import Path
 import subprocess
 import sys
+import urllib.request
 
 from verify_sources import verify
 
 ROOT = Path(__file__).resolve().parent
 PRODUCT_DIR = "jailbreak-product"
+
+# tools/specgen/specgen/product.py pulls these out of the Gradle cache while it
+# compiles the manager's Kotlin on the host JVM. The provider build runs before
+# Gradle ever resolves the app classpath, so a cold runner has none of them and
+# the L3 su gate dies with ULTRA_HOST_DEPENDENCY_MISSING.
+HOST_JARS = (
+    ("org.jetbrains.kotlin", "kotlin-stdlib", "2.4.20"),
+    ("org.jetbrains", "annotations", "13.0"),
+    ("org.jetbrains.kotlinx", "kotlinx-serialization-json-jvm", "1.11.0"),
+    ("org.jetbrains.kotlinx", "kotlinx-serialization-core-jvm", "1.11.0"),
+    ("org.jetbrains.kotlin", "kotlin-compiler-embeddable", "2.4.20"),
+    ("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.11.0"),
+)
+
+
+def ensure_host_jars():
+    """Seed the Gradle cache with the host jars specgen reads, once per runner."""
+    cache = Path(os.environ.get("GRADLE_USER_HOME") or (Path.home() / ".gradle"))
+    base = cache / "caches/modules-2/files-2.1"
+    seeded = []
+    for group, artifact, version in HOST_JARS:
+        directory = base / group / artifact / version
+        if any(directory.glob("*/*.jar")):
+            continue
+        target = directory / "maplesu-host-cache" / (artifact + "-" + version + ".jar")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        url = ("https://repo1.maven.org/maven2/" + group.replace(".", "/") + "/" +
+               artifact + "/" + version + "/" + artifact + "-" + version + ".jar")
+        with urllib.request.urlopen(url, timeout=180) as response, target.open("wb") as handle:
+            shutil.copyfileobj(response, handle)
+        seeded.append(target.name)
+    if seeded:
+        print("MAPLESU: seeded host jars " + ", ".join(sorted(seeded)))
+
 
 
 def sha(path):
@@ -650,6 +685,7 @@ if __name__ == "__main__":
     # A failure is fatal on purpose: a jailbreak that cannot install its kernel
     # root must not look packaged and complete.
     if exit_code == 0:
+        ensure_host_jars()
         ir_dir = output / "ir"
         if args.root_canary:
             # Step 2 canary: rebuilt from source here, never copied from an
