@@ -542,14 +542,6 @@ val checkProviderTracelessInvariants = tasks.register<Exec>("checkProviderTracel
     outputs.upToDateWhen { false }
     workingDir(rootProject.projectDir)
     doFirst {
-        // The L3 su gate and the IR spec generator compile the manager's own Kotlin
-        // on the host JVM and read their jars straight out of the Gradle cache
-        // (tools/specgen/specgen/product.py). Resolve them here so a cold runner
-        // cannot fail with ULTRA_HOST_DEPENDENCY_MISSING.
-        listOfNotNull(
-            configurations.findByName("debugCompileClasspath"),
-            configurations.findByName("kotlinCompilerClasspath"),
-        ).forEach { it.resolve() }
         val python = providers.gradleProperty("maplesuPython")
             .orElse(providers.environmentVariable("MAPLESU_PYTHON")).getOrElse("python")
         commandLine(python,
