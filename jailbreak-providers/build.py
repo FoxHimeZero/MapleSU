@@ -521,6 +521,13 @@ if __name__ == "__main__":
     output.mkdir(parents=True, exist_ok=True)
     retained = verify()
     ndk = args.ndk_dir or args.sdk / "ndk" / args.ndk
+    # Packaging stages our per-kernel plants, which the source export does not
+    # carry as binaries: compile them from the retained upstream exploit source
+    # when this worktree has none yet.
+    plants_dir = ROOT / "shark" / "plants" / "arm64-v8a"
+    if not any(plants_dir.glob("plant-*")):
+        subprocess.run([sys.executable, str(ROOT / "shark" / "build_plants.py"),
+                        "--ndk", str(ndk)], check=True)
     cmake = args.sdk / "cmake/3.22.1/bin/cmake.exe"
     # Packaged adapters share the Manager minimum; upstream review stays separate.
     platform = "-DANDROID_PLATFORM=android-35" if args.review else "-DANDROID_PLATFORM=android-31"
